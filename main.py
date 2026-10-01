@@ -23,7 +23,7 @@ from telegram.ext import (
 BOT_TOKEN = "8635625101:AAENL_CKh30rP6aHQXlPMVeKSvLwILXunX4"
 ADMIN_ID = 8520025523
 
-# Veriler
+# Veri Depoları
 user_balances = {}
 user_vips = {}
 user_spins = {}
@@ -31,6 +31,7 @@ user_discounts = {}
 user_stats = {}
 user_last_photo = {}
 user_ai_mode = {}
+user_lang = {}
 
 SHOP_PACKAGES = {
     "star_5k": {"title": "5.000 FS", "fs": 5000, "stars": 280},
@@ -46,7 +47,7 @@ SHOP_PACKAGES = {
     },
 }
 
-# OpenCV Yüz ve Bıyık Çizim Motoru
+# OpenCV Yüz Algılama ve Bıyık/Sakal Çizim Motoru
 def apply_facial_effect(photo_bytes, effect_code):
     np_arr = np.frombuffer(photo_bytes, np.uint8)
     img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -60,11 +61,10 @@ def apply_facial_effect(photo_bytes, effect_code):
     code = effect_code.upper().strip()
 
     for x, y, w, h in faces:
-        # Dudak/Bıyık Bölgesi (Yüzün alt-orta kısmı)
         mustache_y1 = int(y + h * 0.62)
-        mustache_y2 = int(y + h * 0.75)
-        mustache_x1 = int(x + w * 0.25)
-        mustache_x2 = int(x + w * 0.75)
+        mustache_y2 = int(y + h * 0.74)
+        mustache_x1 = int(x + w * 0.28)
+        mustache_x2 = int(x + w * 0.72)
 
         if "BYK-01" in code:  # İnce / Pala Bıyık
             pts = np.array(
@@ -72,11 +72,11 @@ def apply_facial_effect(photo_bytes, effect_code):
                     [mustache_x1, mustache_y1 + 5],
                     [int(x + w * 0.5), mustache_y1 - 5],
                     [mustache_x2, mustache_y1 + 5],
-                    [int(x + w * 0.5), mustache_y2 - 10],
+                    [int(x + w * 0.5), mustache_y2 - 8],
                 ],
                 np.int32,
             )
-            cv2.fillPoly(img, [pts], (20, 20, 20))
+            cv2.fillPoly(img, [pts], (15, 15, 15))
 
         elif "BYK-02" in code:  # Kalın Koyu Bıyık
             cv2.ellipse(
@@ -90,7 +90,7 @@ def apply_facial_effect(photo_bytes, effect_code):
                 -1,
             )
 
-        elif "BYK-03" in code:  # Top Sakal + Bıyık
+        elif "BYK-03" in code:  # Top Sakal & Bıyık
             cv2.ellipse(
                 img,
                 (int(x + w * 0.5), int(mustache_y1)),
@@ -98,32 +98,27 @@ def apply_facial_effect(photo_bytes, effect_code):
                 0,
                 0,
                 180,
-                (15, 15, 15),
+                (10, 10, 10),
                 -1,
             )
             cv2.ellipse(
                 img,
                 (int(x + w * 0.5), int(y + h * 0.85)),
-                (int(w * 0.15), int(h * 0.1)),
+                (int(w * 0.16), int(h * 0.1)),
                 0,
                 0,
                 360,
-                (15, 15, 15),
+                (10, 10, 10),
                 -1,
             )
 
         elif "SKL-01" in code:  # Kirli Sakal
-            for _ in range(300):
+            for _ in range(400):
                 rx = random.randint(int(x + w * 0.2), int(x + w * 0.8))
-                ry = random.randint(int(y + h * 0.65), int(y + h * 0.92))
+                ry = random.randint(int(y + h * 0.62), int(y + h * 0.92))
                 cv2.line(
-                    img, (rx, ry), (rx + 2, ry + 4), (30, 30, 30), 1
+                    img, (rx, ry), (rx + 2, ry + 4), (20, 20, 20), 1
                 )
-
-        elif "YAS-60" in code:  # Yaşlandırma
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            img = cv2.equalizeHist(img)
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
     _, encoded_img = cv2.imencode(".jpg", img)
     return io.BytesIO(encoded_img.tobytes())
@@ -163,35 +158,100 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_balances.setdefault(user_id, 0)
     user_spins.setdefault(user_id, 8)
     user_stats.setdefault(user_id, 0)
-    user_discounts.setdefault(user_id, [])
 
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("🇹🇷 Türkçe", callback_data="lang_tr"),
+                InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"),
+            ],
+            [
+                InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"),
+                InlineKeyboardButton("🇦🇿 Azərbaycanca", callback_data="lang_az"),
+            ],
+            [
+                InlineKeyboardButton("☀️ Kurdî", callback_data="lang_ku"),
+            ],
+        ]
+    )
     await update.message.reply_text(
-        "🔥 **FACEİSTOKİS AI Botuna Hoşgeldiniz!**\n\n📸 İşlemek istediğiniz fotoğrafı gönderin.",
-        reply_markup=get_main_keyboard(),
+        "🔥 **FACEİSTOKİS AI Botuna Hoşgeldiniz! / Welcome!**\n\nLütfen bir dil seçin / Choose language:",
+        reply_markup=keyboard,
         parse_mode="Markdown",
     )
-
-# Admin FS Verme Komutu: /ver <user_id> <miktar>
-async def give_fs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if user_id != ADMIN_ID:
-        return
-
-    try:
-        target_id = int(context.args[0])
-        amount = int(context.args[1])
-        user_balances[target_id] = user_balances.get(target_id, 0) + amount
-        await update.message.reply_text(
-            f"✅ `{target_id}` kullanıcısına **{amount} FS** başarıyla hediye edildi!\nYeni Bakiye: {user_balances[target_id]} FS"
-        )
-    except Exception:
-        await update.message.reply_text("Kullanım: `/ver <kullanici_id> <miktar>`")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
     data = query.data
+
+    if data.startswith("lang_"):
+        user_lang[user_id] = data.replace("lang_", "")
+        await query.message.reply_text(
+            "✅ **Dil Seçildi!**\n📸 İşlenmesini istediğiniz fotoğrafı gönderin.",
+            reply_markup=get_main_keyboard(),
+            parse_mode="Markdown",
+        )
+        return
+
+    if data == "shop":
+        buttons = []
+        is_admin = user_id == ADMIN_ID
+
+        for key, pkg in SHOP_PACKAGES.items():
+            if is_admin:
+                btn_text = f"🎁 {pkg['title']} (ÜCRETSİZ - Admin)"
+            else:
+                btn_text = f"⭐ {pkg['title']} ({pkg['stars']} Yıldız)"
+            buttons.append([InlineKeyboardButton(btn_text, callback_data=f"buy_{key}")])
+
+        await query.message.reply_text(
+            "⭐ **FACEİSTOKİS YILDIZ MAĞAZASI**\n\nPaket seçiniz:",
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="Markdown",
+        )
+        return
+
+    if data.startswith("buy_"):
+        pkg_key = data.replace("buy_", "")
+        pkg = SHOP_PACKAGES.get(pkg_key)
+
+        if pkg:
+            # ADMIN ÖZEL: Bedava yükleme
+            if user_id == ADMIN_ID:
+                if pkg.get("vip"):
+                    user_vips[user_id] = True
+                    await query.message.reply_text("👑 **Admin VIP Hesaba Tanımlandı!**")
+                else:
+                    user_balances[user_id] = user_balances.get(user_id, 0) + pkg["fs"]
+                    await query.message.reply_text(
+                        f"⚡ **Admin Özel:** +{pkg['fs']} FS Bakiyenize Eklendi!\nYeni Bakiyeniz: {user_balances[user_id]} FS"
+                    )
+            else:
+                prices = [LabeledPrice(label=pkg["title"], amount=pkg["stars"])]
+                await context.bot.send_invoice(
+                    chat_id=user_id,
+                    title=pkg["title"],
+                    description=f"FACEİSTOKİS {pkg['title']} Paketi",
+                    payload=pkg_key,
+                    provider_token="",
+                    currency="XTR",
+                    prices=prices,
+                )
+        return
+
+    if data == "profile":
+        bal = user_balances.get(user_id, 0)
+        await query.message.reply_text(
+            f"👤 **PROFİL BİLGİLERİNİZ**\n\n"
+            f"🆔 **ID:** `{user_id}`\n"
+            f"💰 **Bakiye:** `{bal} FS`\n"
+            f"👑 **Rol:** `{'Admin' if user_id == ADMIN_ID else 'Kullanıcı'}`",
+            parse_mode="Markdown",
+            reply_markup=get_main_keyboard(),
+        )
+        return
 
     if data == "cat_beard":
         await query.message.reply_text(
@@ -202,25 +262,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• `SKL-01` : Kirli Sakal\n\n"
             "Kodu mesaj olarak gönderin."
         )
-    elif data == "cat_age":
-        await query.message.reply_text(
-            "👶👴 **YAŞ KODLARI (10 FS):**\n• `YAS-60` : Yaşlandır\n\nKodu mesaj olarak gönderin."
-        )
-    elif data == "profile":
-        bal = user_balances.get(user_id, 0)
-        await query.message.reply_text(
-            f"👤 **PROFİL BİLGİLERİNİZ**\n\n"
-            f"🆔 **ID:** `{user_id}`\n"
-            f"💰 **Bakiye:** `{bal} FS`",
-            parse_mode="Markdown",
-            reply_markup=get_main_keyboard(),
-        )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     photo_file = await update.message.photo[-1].get_file()
-    photo_bytes = await photo_file.download_as_bytearray()
-    user_last_photo[user_id] = photo_bytes
+    user_last_photo[user_id] = await photo_file.download_as_bytearray()
 
     await update.message.reply_text(
         "📸 **Fotoğraf Kaydedildi!**\n\nŞimdi efekti seçin veya kodunu yazın (Örn: `BYK-01`, `BYK-02`):",
@@ -232,13 +278,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     text = update.message.text.strip().upper()
 
-    # Bakiye / FS Kontrolü (Sıkı Kontrol)
+    is_admin = user_id == ADMIN_ID
     user_bal = user_balances.get(user_id, 0)
-    is_vip = user_vips.get(user_id, False) or user_id == ADMIN_ID
 
-    if not is_vip and user_bal < 10:
+    # Adminler için bakiye kontrolü es geçilir
+    if not is_admin and user_bal < 10:
         await update.message.reply_text(
-            f"❌ **Bakiye Yetersiz!** Bu işlem için **10 FS** gerekiyor.\nMevcut Bakiyeniz: **{user_bal} FS**\nYıldız Mağazasından bakiye alabilirsiniz."
+            f"❌ **Bakiye Yetersiz!** İşlem için **10 FS** gerekiyor.\nMevcut Bakiyeniz: **{user_bal} FS**"
         )
         return
 
@@ -246,36 +292,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ **Lütfen önce bir fotoğraf gönderin!**")
         return
 
-    msg = await update.message.reply_text(
-        f"⚡ `{text}` efekti fotoğrafa uygulanıyor...", parse_mode="Markdown"
-    )
+    msg = await update.message.reply_text(f"⚡ `{text}` efekti uygulanıyor...", parse_mode="Markdown")
 
     try:
         processed_photo = apply_facial_effect(user_last_photo[user_id], text)
 
-        # İşlem başarılı olursa 10 FS düş
-        if not is_vip:
+        if not is_admin:
             user_balances[user_id] -= 10
 
         await context.bot.send_photo(
             chat_id=user_id,
             photo=processed_photo,
-            caption=f"✅ **{text}** efekti başarıyla uygulandı!\nKalan Bakiye: {user_balances.get(user_id, 0)} FS",
+            caption=f"✅ **{text}** efekti uygulandı!\nKalan Bakiye: {user_balances.get(user_id, 0)} FS",
             reply_markup=get_main_keyboard(),
             parse_mode="Markdown",
         )
         await msg.delete()
     except Exception as e:
-        await msg.edit_text(f"❌ İşlem sırasında bir hata oluştu: {str(e)}")
+        await msg.edit_text(f"❌ Hata oluştu: {str(e)}")
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("ver", give_fs))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("⚡ FACEİSTOKİS AI Aktif!")
     app.run_polling()
-                
+            
