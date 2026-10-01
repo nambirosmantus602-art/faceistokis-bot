@@ -36,7 +36,7 @@ ADMIN_ID = 8520025523
 user_balances = {}
 user_last_photo = {}
 user_ai_mode = {}
-user_ai_photo_mode = {}  # AI Foto Modu
+user_ai_photo_mode = {}
 user_referrals = {}
 user_daily_claimed = {}
 
@@ -53,21 +53,16 @@ SHOP_PACKAGES = {
     },
 }
 
-# --- HAAR CASCADE YÜZ MODELİ YÜKLEME ---
-CASCADE_FILE = "haarcascade_frontalface_default.xml"
-if not os.path.exists(CASCADE_FILE):
-    url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
-    r = requests.get(url)
-    with open(CASCADE_FILE, "wb") as f:
-        f.write(r.content)
-
-face_cascade = cv2.CascadeClassifier(CASCADE_FILE)
+# --- HAAR CASCADE YÜZ MODELİ YÜKLEME (GARANTİ YÖNTEM) ---
+CASCADE_PATH = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+face_cascade = cv2.CascadeClassifier(CASCADE_PATH)
 
 # --- DİNAMİK AI FOTOĞRAF İŞLEME MOTORU ---
 def process_ai_custom_photo(photo_bytes, prompt_text):
     np_arr = np.frombuffer(photo_bytes, np.uint8)
     img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
     prompt = prompt_text.lower().strip()
@@ -97,7 +92,6 @@ def process_ai_custom_photo(photo_bytes, prompt_text):
             mustache_x1 = int(x + w * 0.28)
             mustache_x2 = int(x + w * 0.72)
             
-            # Rastgele veya isteğe uygun bıyık/sakal çizimi
             pts = np.array([
                 [mustache_x1, mustache_y1 + random.randint(2, 6)],
                 [int(x + w * 0.5), mustache_y1 - random.randint(3, 7)],
@@ -118,13 +112,11 @@ def process_ai_custom_photo(photo_bytes, prompt_text):
             gy1, gy2 = int(y + h * 0.32), int(y + h * 0.46)
             cv2.rectangle(img, (int(x + w * 0.15), gy1), (int(x + w * 0.85), gy2), (15, 15, 15), -1)
 
-    # Eğer PIL tabanlı bir renk efekti uygulandıysa onu döndür
     if any(color in prompt for color in ["mavi", "sarı", "kırmızı", "kızıl", "yeşil"]):
         out = io.BytesIO()
         pil_img.save(out, format="JPEG", quality=95)
         return io.BytesIO(out.getvalue())
 
-    # OpenCV ile işlenen resmi döndür
     _, encoded_img = cv2.imencode(".jpg", img)
     return io.BytesIO(encoded_img.tobytes())
 
@@ -133,6 +125,7 @@ def apply_facial_effect(photo_bytes, effect_code):
     np_arr = np.frombuffer(photo_bytes, np.uint8)
     img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
     code = effect_code.upper().strip()
@@ -325,7 +318,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo_file = await update.message.photo[-1].get_file()
     user_last_photo[user_id] = await photo_file.download_as_bytearray()
 
-    # Eğer kullanıcı AI Foto butonuna basıp geldiyse
     if user_ai_photo_mode.get(user_id) == "WAITING_PHOTO":
         user_ai_photo_mode[user_id] = "WAITING_PROMPT"
         await update.message.reply_text(
@@ -350,7 +342,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🤖 **İşlemden çıkıldı.**", reply_markup=get_main_keyboard())
         return
 
-    # AI Foto Modunda İstek Metni Geldiğinde
     if user_ai_photo_mode.get(user_id) == "WAITING_PROMPT":
         user_bal = user_balances.get(user_id, 0)
         if not is_admin and user_bal < 22:
@@ -446,4 +437,4 @@ if __name__ == "__main__":
     
     print("⚡ FACEİSTOKİS AI Aktif!")
     app.run_polling(drop_pending_updates=True)
-        
+            
