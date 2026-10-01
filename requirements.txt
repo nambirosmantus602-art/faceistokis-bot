@@ -1,6 +1,4 @@
-python-telegram-bot>=20.0
-pillow
+python-telegram-bot==20.7
 opencv-python-headless
-mediapipe
 numpy
-g4f
+Pillow
